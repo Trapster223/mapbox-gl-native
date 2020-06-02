@@ -10,6 +10,11 @@
 
 namespace mbgl {
 
+class LineBucket;
+class RenderTile;
+class RenderSource;
+class TransformState;
+
 class RenderLineLayer final : public RenderLayer {
 public:
     explicit RenderLineLayer(Immutable<style::LineLayer::Impl>);
@@ -36,10 +41,11 @@ private:
     style::LinePaintProperties::Unevaluated unevaluated;
 
     float getLineWidth(const GeometryTileFeature&, float, const FeatureState&) const;
-    void updateColorRamp();
+    void updateColorRamp(LineBucket& lineBucket, const RenderTile& tile, const RenderSource& source, const TransformState& state);
 
     PremultipliedImage colorRamp;
     optional<gfx::Texture> colorRampTexture;
+    uint32_t gradientVersion;
 };
 
 } // namespace mbgl

@@ -26,9 +26,20 @@ MBGL_DEFINE_UNIFORM_VECTOR(float, 2, patternscale_b);
 MBGL_DEFINE_UNIFORM_VECTOR(float, 2, units_to_pixels);
 } // namespace uniforms
 
+namespace attributes {
+MBGL_DEFINE_ATTRIBUTE(float, 1, line_progress);
+MBGL_DEFINE_ATTRIBUTE(float, 1, line_clip);
+MBGL_DEFINE_ATTRIBUTE(uint32_t, 1, split_index);
+} // namespace attributes
+
 using LineLayoutAttributes = TypeList<
     attributes::pos_normal,
     attributes::data<uint8_t, 4>>;
+
+using LineLayoutAttributesExt = TypeList<
+    attributes::line_progress,
+    attributes::line_clip,
+    attributes::split_index>;
 
 class LineProgram : public Program<
     LineProgram,
@@ -182,6 +193,7 @@ public:
 
 using LineLayoutVertex = LineProgram::LayoutVertex;
 using LineAttributes = LineProgram::AttributeList;
+using LineLayoutVertexExt = gfx::Vertex<LineLayoutAttributesExt>;
 
 class LineLayerPrograms final : public LayerTypePrograms {
 public:

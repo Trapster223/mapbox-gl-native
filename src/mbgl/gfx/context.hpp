@@ -27,6 +27,7 @@ public:
     static constexpr const uint32_t minimumRequiredVertexBindingCount = 8;
     const uint32_t maximumVertexBindingCount;
     bool supportsHalfFloatTextures = false;
+    int32_t maxTextureSize;
 
 public:
     Context(Context&&) = delete;

@@ -65,7 +65,7 @@ Context::~Context() {
     }
 }
 
-void Context::initializeExtensions(const std::function<gl::ProcAddress(const char*)>& getProcAddress) {
+void Context::initialize(const std::function<gl::ProcAddress(const char*)>& getProcAddress) {
     if (const auto* extensions =
             reinterpret_cast<const char*>(MBGL_CHECK_ERROR(glGetString(GL_EXTENSIONS)))) {
 
@@ -123,6 +123,8 @@ void Context::initializeExtensions(const std::function<gl::ProcAddress(const cha
             Log::Warning(Event::OpenGL, "Not using Vertex Array Objects");
         }
     }
+
+    MBGL_CHECK_ERROR(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize));
 }
 
 void Context::enableDebugging() {

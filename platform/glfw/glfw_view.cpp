@@ -25,6 +25,8 @@
 #include <mbgl/util/logging.hpp>
 #include <mbgl/util/platform.hpp>
 #include <mbgl/util/string.hpp>
+#include <mbgl/style/conversion/color_ramp_property_value.hpp>
+#include <mbgl/style/conversion/json.hpp>
 
 #include <mapbox/cheap_ruler.hpp>
 #include <mapbox/geometry.hpp>
@@ -408,6 +410,37 @@ void GLFWView::onKey(GLFWwindow *window, int key, int /*scancode*/, int action, 
         case GLFW_KEY_T:
             view->toggleCustomSource();
             break;
+        case GLFW_KEY_V: {
+            using namespace mbgl;
+            using namespace mbgl::style;
+            auto &style = view->map->getStyle();
+            if (!style.getSource("line-gradient-source")) {
+                std::string url = "https://gist.githubusercontent.com/karimnaaji/0ea3016a825a4c2883fce309183f0c20/raw/9f67d55c3c797b8b1183dc27a26ec705ac619198/polylines.geojson";
+                GeoJSONOptions options;
+                options.lineMetrics = true;
+                auto source = std::make_unique<GeoJSONSource>("line-gradient-source", Immutable<GeoJSONOptions>(makeMutable<GeoJSONOptions>(options)));
+                source->setURL(url);
+                style.addSource(std::move(source));
+
+                mbgl::CameraOptions cameraOptions;
+                cameraOptions.center = mbgl::LatLng{38.888, -77.01866};
+                cameraOptions.zoom = 12.5;
+                cameraOptions.pitch = 0;
+                cameraOptions.bearing = 0;
+                view->map->jumpTo(cameraOptions);
+            }
+
+            if (!style.getLayer("line-gradient")) {
+                auto lineLayer = std::make_unique<LineLayer>("line-gradient", "line-gradient-source");
+                lineLayer->setLineWidth(PropertyValue<float>(14.0f));
+                std::string rawValue = R"JSON(["step",["line-progress"],"rgba(0, 0, 255, 0.1)",0.25,"red",0.6,"yellow"])JSON";
+                conversion::Error error;
+                auto ramp = conversion::convertJSON<ColorRampPropertyValue>(rawValue, error);
+                lineLayer->setLineGradient(ramp.value());
+                style.addLayer(std::move(lineLayer));
+            }
+        }
+        break;
         case GLFW_KEY_F: {
             using namespace mbgl;
             using namespace mbgl::style;

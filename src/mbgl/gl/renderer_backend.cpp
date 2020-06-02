@@ -15,7 +15,7 @@ RendererBackend::RendererBackend(const gfx::ContextMode contextMode_)
 std::unique_ptr<gfx::Context> RendererBackend::createContext() {
     auto result = std::make_unique<gl::Context>(*this);
     result->enableDebugging();
-    result->initializeExtensions(
+    result->initialize(
             std::bind(&RendererBackend::getExtensionFunctionPointer, this, std::placeholders::_1));
     return result;
 }

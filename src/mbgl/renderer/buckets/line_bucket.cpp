@@ -15,7 +15,7 @@ LineBucket::LineBucket(LineBucket::PossiblyEvaluatedLayoutProperties layout_,
                        const std::map<std::string, Immutable<LayerProperties>>& layerPaintProperties,
                        const float zoom_,
                        const uint32_t overscaling_)
-    : layout(std::move(layout_)), zoom(zoom_), overscaling(overscaling_) {
+    : layout(std::move(layout_)), gradientVersion(0), maxLineLength(0.0), zoom(zoom_), overscaling(overscaling_) {
     for (const auto& pair : layerPaintProperties) {
         paintPropertyBinders.emplace(
             std::piecewise_construct,
@@ -34,6 +34,7 @@ void LineBucket::addFeature(const GeometryTileFeature& feature,
                             const PatternLayerMap& patternDependencies,
                             std::size_t index,
                             const CanonicalTileID& canonical) {
+    lineClips.reserve(geometryCollection.size());
     for (auto& line : geometryCollection) {
         addGeometry(line, feature, canonical);
     }
@@ -92,7 +93,15 @@ public:
         return (relativeTileDistance * (clipEnd - clipStart) + clipStart) * (MAX_LINE_DISTANCE - 1);
     }
 
-private:
+    double lineDistance(double tileDistance) const {
+        double relativeTileDistance = tileDistance / total;
+        if (std::isinf(relativeTileDistance) || std::isnan(relativeTileDistance)) {
+            assert(false);
+            relativeTileDistance = 0.0;
+        }
+        return relativeTileDistance * (clipEnd - clipStart) + clipStart;
+    }
+
     double clipStart;
     double clipEnd;
     double total;
@@ -136,8 +145,10 @@ void LineBucket::addGeometry(const GeometryCoordinates& coordinates,
             total_length += util::dist<double>(coordinates[i], coordinates[i + 1]);
         }
 
+        maxLineLength = std::max<double>(maxLineLength, total_length);
         lineDistances = Distances{
             *numericValue<double>(clip_start_it->second), *numericValue<double>(clip_end_it->second), total_length};
+        lineClips.push_back(LineClip{ lineDistances->clipStart, lineDistances->clipEnd });
     }
 
     const LineJoinType joinType = layout.evaluate<LineJoin>(zoom, feature, canonical);
@@ -466,6 +477,13 @@ void LineBucket::addCurrentVertex(const GeometryCoordinate& currentCoordinate,
     if (endLeft)
         extrude = extrude - (util::perp(normal) * endLeft);
     vertices.emplace_back(LineProgram::layoutVertex(currentCoordinate, extrude, round, false, endLeft, scaledDistance * LINE_DISTANCE_SCALE));
+    if (lineDistances) {
+        vertices2.emplace_back(LineLayoutVertexExt {
+            { static_cast<float>(lineDistances->lineDistance(distance) - lineDistances->clipStart) },
+            { static_cast<float>(lineDistances->clipEnd - lineDistances->clipStart) },
+            { static_cast<uint32_t>(lineClips.size()) }
+        });
+    }
     e3 = vertices.elements() - 1 - startVertex;
     if (e1 >= 0 && e2 >= 0) {
         triangleStore.emplace_back(e1, e2, e3);
@@ -477,6 +495,13 @@ void LineBucket::addCurrentVertex(const GeometryCoordinate& currentCoordinate,
     if (endRight)
         extrude = extrude - (util::perp(normal) * endRight);
     vertices.emplace_back(LineProgram::layoutVertex(currentCoordinate, extrude, round, true, -endRight, scaledDistance * LINE_DISTANCE_SCALE));
+    if (lineDistances) {
+        vertices2.emplace_back(LineLayoutVertexExt {
+            { static_cast<float>(lineDistances->lineDistance(distance) - lineDistances->clipStart) },
+            { static_cast<float>(lineDistances->clipEnd - lineDistances->clipStart) },
+            { static_cast<uint32_t>(lineClips.size()) }
+        });
+    }
     e3 = vertices.elements() - 1 - startVertex;
     if (e1 >= 0 && e2 >= 0) {
         triangleStore.emplace_back(e1, e2, e3);
@@ -507,6 +532,7 @@ void LineBucket::addPieSliceVertex(const GeometryCoordinate& currentVertex,
     }
 
     vertices.emplace_back(LineProgram::layoutVertex(currentVertex, flippedExtrude, false, lineTurnsLeft, 0, distance * LINE_DISTANCE_SCALE));
+    vertices2.emplace_back(LineLayoutVertexExt{});
     e3 = vertices.elements() - 1 - startVertex;
     if (e1 >= 0 && e2 >= 0) {
         triangleStore.emplace_back(e1, e2, e3);
@@ -521,6 +547,9 @@ void LineBucket::addPieSliceVertex(const GeometryCoordinate& currentVertex,
 
 void LineBucket::upload(gfx::UploadPass& uploadPass) {
     if (!uploaded) {
+        if (vertices2.elements() > 0) {
+            vertexBuffer2 = uploadPass.createVertexBuffer(std::move(vertices2));
+        }
         vertexBuffer = uploadPass.createVertexBuffer(std::move(vertices));
         indexBuffer = uploadPass.createIndexBuffer(std::move(triangles));
     }

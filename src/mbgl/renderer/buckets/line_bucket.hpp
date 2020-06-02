@@ -47,7 +47,19 @@ public:
     SegmentVector<LineAttributes> segments;
 
     optional<gfx::VertexBuffer<LineLayoutVertex>> vertexBuffer;
+    gfx::VertexVector<LineLayoutVertexExt> vertices2;
+    optional<gfx::VertexBuffer<LineLayoutVertexExt>> vertexBuffer2;
+    optional<gfx::Texture> gradientTexture;
     optional<gfx::IndexBuffer> indexBuffer;
+
+    uint32_t gradientVersion;
+    double maxLineLength;
+
+    struct LineClip {
+        double start;
+        double end;
+    };
+    std::vector<LineClip> lineClips;
 
     std::map<std::string, LineProgram::Binders> paintPropertyBinders;
 

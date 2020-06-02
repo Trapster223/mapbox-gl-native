@@ -164,6 +164,7 @@
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_VIEWPORT 0x0BA2
 #define GL_ZERO 0
+#define GL_MAX_TEXTURE_SIZE 0x0D33
 #ifdef MBGL_USE_GLES2
 #define GL_HALF_FLOAT 0x8D61
 #else

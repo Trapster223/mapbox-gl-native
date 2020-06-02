@@ -46,7 +46,7 @@ public:
     gfx::RenderingStats& renderingStats();
     const gfx::RenderingStats& renderingStats() const override;
 
-    void initializeExtensions(const std::function<gl::ProcAddress(const char*)>&);
+    void initialize(const std::function<gl::ProcAddress(const char*)>&);
 
     void enableDebugging();
 

@@ -7,7 +7,6 @@
 #include <mbgl/renderer/image_manager.hpp>
 #include <mbgl/renderer/layers/render_line_layer.hpp>
 #include <mbgl/renderer/paint_parameters.hpp>
-#include <mbgl/renderer/render_source.hpp>
 #include <mbgl/renderer/render_tile.hpp>
 #include <mbgl/renderer/upload_parameters.hpp>
 #include <mbgl/style/expression/image.hpp>
@@ -33,13 +32,14 @@ inline const LineLayer::Impl& impl_cast(const Immutable<style::Layer::Impl>& imp
 RenderLineLayer::RenderLineLayer(Immutable<style::LineLayer::Impl> _impl)
     : RenderLayer(makeMutable<LineLayerProperties>(std::move(_impl))),
       unevaluated(impl_cast(baseImpl).paint.untransitioned()),
-      colorRamp({256, 1}) {}
+      colorRamp({256, 1}),
+      gradientVersion(0) {}
 
 RenderLineLayer::~RenderLineLayer() = default;
 
 void RenderLineLayer::transition(const TransitionParameters& parameters) {
     unevaluated = impl_cast(baseImpl).paint.transitioned(parameters, std::move(unevaluated));
-    updateColorRamp();
+    gradientVersion = (gradientVersion + 1) % std::numeric_limits<uint32_t>::max();
 }
 
 void RenderLineLayer::evaluate(const PropertyEvaluationParameters& parameters) {
@@ -80,6 +80,7 @@ void RenderLineLayer::prepare(const LayerPrepareParameters& params) {
         // Ensures that the dash data gets added to the atlas.
         params.lineAtlas.getDashPatternTexture(
             evaluated.get<LineDasharray>().from, evaluated.get<LineDasharray>().to, cap);
+        updateColorRamp(bucket, tile, *params.source, params.state);
     }
 }
 
@@ -186,7 +187,8 @@ void RenderLineLayer::render(PaintParameters& parameters) {
                          textures::image::Value{ tile.getIconAtlasTexture().getResource(), gfx::TextureFilterType::Linear },
                      });
         } else if (!unevaluated.get<LineGradient>().getValue().isUndefined()) {
-            assert(colorRampTexture);
+            assert(bucket.gradientVersion == gradientVersion);
+            assert(bucket.gradientTexture);
 
             draw(parameters.programs.getLineLayerPrograms().lineGradient,
                  LineGradientProgram::layoutUniformValues(
@@ -287,24 +289,39 @@ bool RenderLineLayer::queryIntersectsFeature(const GeometryCoordinates& queryGeo
         halfWidth);
 }
 
-void RenderLineLayer::updateColorRamp() {
+void RenderLineLayer::updateColorRamp(LineBucket& lineBucket, const RenderTile& tile, const RenderSource& source, const TransformState& state) {
     auto colorValue = unevaluated.get<LineGradient>().getValue();
     if (colorValue.isUndefined()) {
         return;
     }
+    if (!lineBucket.gradientTexture || gradientVersion != lineBucket.gradientVersion) {
+        // const uint32_t textureResolution = 256;
+        const expression::Expression& expression = colorValue.getExpression();
+        const bool isStepExpression = expression.getKind() == style::expression::Kind::Step;
+        if (isStepExpression) {
+            const uint8_t sourceMaxZoom = source.getMaxZoom();
+            const uint8_t zoomDiff = static_cast<uint8_t>(state.getMaxZoom()) - tile.id.canonical.z;
+            const float potentialOverzoom = tile.id.canonical.z == sourceMaxZoom ?
+                ceilf(static_cast<float>(1 << zoomDiff)) : 1.0f;
+            const float lineLength = lineBucket.maxLineLength / static_cast<float>(util::EXTENT);
+            const float maxTileSize = 1024;
+            const float maxTextureCoverage = lineLength * maxTileSize * potentialOverzoom;
+            (void)maxTextureCoverage;
+        }
 
-    const auto length = colorRamp.bytes();
+        const auto length = colorRamp.bytes();
 
-    for (uint32_t i = 0; i < length; i += 4) {
-        const auto color = colorValue.evaluate(static_cast<double>(i) / length);
-        colorRamp.data[i] = std::floor(color.r * 255);
-        colorRamp.data[i + 1] = std::floor(color.g * 255);
-        colorRamp.data[i + 2] = std::floor(color.b * 255);
-        colorRamp.data[i + 3] = std::floor(color.a * 255);
-    }
+        for (uint32_t i = 0; i < length; i += 4) {
+            const auto color = colorValue.evaluate(static_cast<double>(i) / length);
+            colorRamp.data[i] = std::floor(color.r * 255);
+            colorRamp.data[i + 1] = std::floor(color.g * 255);
+            colorRamp.data[i + 2] = std::floor(color.b * 255);
+            colorRamp.data[i + 3] = std::floor(color.a * 255);
+        }
 
-    if (colorRampTexture) {
-        colorRampTexture = nullopt;
+        if (colorRampTexture) {
+            colorRampTexture = nullopt;
+        }
     }
 }
 
